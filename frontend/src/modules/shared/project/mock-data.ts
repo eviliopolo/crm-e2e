@@ -132,15 +132,7 @@ export const DEMO_VENTAS_GANADAS: VentaGanadaRecord[] = [
     },
     indicadores: indicadoresMock(),
     csat: { valor: null, escala: 5, fecha: null },
-    alertas: [
-      {
-        id: 'a1',
-        tipo: 'Validación financiera',
-        estado: 'Activa',
-        descripcion: 'Validación financiera pendiente — envío a PMO bloqueado.',
-        fecha: ISO('2026-08-20'),
-      },
-    ],
+    alertas: [],
     historialEstados: [
       { estado: 'OUV creada', fecha: ISO('2026-07-10'), origen: 'CRM' },
       { estado: 'Ganada', fecha: ISO('2026-08-15'), origen: 'CRM' },

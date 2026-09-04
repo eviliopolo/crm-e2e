@@ -6,7 +6,6 @@ import { fetchOuv, type Ouv } from '../../discovery/api/ouvs-api';
 import { OuvReadonlyHeaderCard } from '../../discovery/components/OuvReadonlyHeaderCard';
 import { loadOuvExtensions } from '../../discovery/lib/ouv-detail-extensions';
 import type { OuvDetailExtensions } from '../../discovery/lib/ouv-detail-extensions';
-import { AlertaBanner } from '../../shared/project/AlertaBadge';
 import {
   getVentaGanada,
   puedeEnviarAPmo,
@@ -104,6 +103,14 @@ export function VentaGanadaDetailPage() {
       .catch(() => setOuv(ouvFromVentaRecord(record)));
   }, [record]);
 
+  const kickoffUnlocked = record ? puedeEnviarKickoff(record) : false;
+  // TODO: lock Datos proyecto until kickoff checklist step 4 (días) when Teams integration lands.
+  const datosUnlocked = true;
+
+  useEffect(() => {
+    if (tab === 'kickoff' && !kickoffUnlocked) setTab('validaciones');
+  }, [tab, kickoffUnlocked]);
+
   if (!record) {
     return (
       <AppLayout title="Oferta & Cierre">
@@ -138,21 +145,6 @@ export function VentaGanadaDetailPage() {
         },
       },
     };
-    const hasBlock = Object.values(next.validaciones).some(
-      (v) => v.estado !== 'Aprobado',
-    );
-    next.alertas = hasBlock
-      ? [
-          {
-            id: 'val-block',
-            tipo: 'Validación pendiente',
-            estado: 'Activa',
-            descripcion:
-              'Hay validaciones pendientes o rechazadas — envío a PMO bloqueado.',
-            fecha: new Date().toISOString(),
-          },
-        ]
-      : [];
     next.estadoRevision = Object.values(next.validaciones).every(
       (v) => v.estado === 'Aprobado',
     )
@@ -161,15 +153,24 @@ export function VentaGanadaDetailPage() {
     save(next);
   }
 
-  const tabBtn = (t: Tab, label: string) => (
+  const tabBtn = (
+    t: Tab,
+    label: string,
+    unlocked: boolean,
+    lockedTitle?: string,
+  ) => (
     <button
       type="button"
       className={`-mb-px border-b-2 px-4 py-2 text-sm ${
-        tab === t
-          ? 'border-accent font-bold text-accent'
-          : 'border-transparent text-muted hover:text-accent'
+        !unlocked
+          ? 'cursor-not-allowed border-transparent text-muted/50'
+          : tab === t
+            ? 'border-accent font-bold text-accent'
+            : 'border-transparent text-muted hover:text-accent'
       }`}
-      onClick={() => setTab(t)}
+      disabled={!unlocked}
+      title={!unlocked ? lockedTitle : undefined}
+      onClick={() => unlocked && setTab(t)}
     >
       {label}
     </button>
@@ -209,9 +210,14 @@ export function VentaGanadaDetailPage() {
         className="mb-4 flex flex-wrap items-center gap-1 border-b border-border"
         aria-label="Detalle venta ganada"
       >
-        {tabBtn('validaciones', 'Viabilidad')}
-        {tabBtn('kickoff', 'Kickoff')}
-        {tabBtn('datos', 'Datos proyecto')}
+        {tabBtn('validaciones', 'Viabilidad', true)}
+        {tabBtn(
+          'kickoff',
+          'Kickoff',
+          kickoffUnlocked,
+          'Aprueba las viabilidades técnica y financiera para habilitar Kickoff.',
+        )}
+        {tabBtn('datos', 'Datos proyecto', datosUnlocked)}
         {tab === 'datos' ? (
           <div className="ml-auto flex items-center pb-1">
             <button
@@ -226,10 +232,6 @@ export function VentaGanadaDetailPage() {
           </div>
         ) : null}
       </nav>
-
-      {record.alertas.map((a) => (
-        <AlertaBanner key={a.id} alerta={a} />
-      ))}
 
       {tab === 'validaciones' ? (
         <div className="space-y-4">
