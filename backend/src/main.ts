@@ -17,6 +17,20 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const configService = app.get(ConfigService);
 
+  const corsOrigins = (configService.get<string>('CORS_ORIGIN') ?? '')
+    .split(',')
+    .map((origin) => origin.trim().replace(/^["']|["']$/g, ''))
+    .filter(Boolean);
+
+  if (corsOrigins.length > 0) {
+    app.enableCors({
+      origin: corsOrigins,
+      methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+      maxAge: 86_400,
+    });
+  }
+
   app.useWebSocketAdapter(new IoAdapter(app));
 
   const yamlHeaders = {
