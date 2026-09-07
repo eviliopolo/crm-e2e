@@ -52,6 +52,7 @@ import {
   tabActiveClass,
   tabClass,
 } from '../components/ui';
+import { backLinkForResultado } from '../lib/ouv-bandejas';
 import {
   INFLUENCIA_ESTADO_CARD,
   INFLUENCIA_ESTADO_DOT,
@@ -444,7 +445,7 @@ export function OuvDetailPage() {
       <AppLayout title="OUV">
         <p className="text-sm text-danger">{error ?? 'OUV no encontrada'}</p>
         <Link to="/opportunities" className="mt-3 inline-block text-accent">
-          Volver a bandeja
+          Volver a Bandeja OUV
         </Link>
       </AppLayout>
     );
@@ -454,13 +455,14 @@ export function OuvDetailPage() {
     ouv.resultado === 'EnCurso' && user?.user_id === ouv.comercial_id;
   const isSoporte =
     user?.role_name === 'SoporteComercial' || user?.role_name === 'Admin';
+  const backLink = backLinkForResultado(ouv.resultado);
 
   return (
     <AppLayout title={ouv.consecutivo}>
       <DiscoveryNav />
       <div className="mb-4">
-        <Link to="/opportunities" className="text-sm text-accent hover:underline">
-          ← Bandeja OUV
+        <Link to={backLink.to} className="text-sm text-accent hover:underline">
+          {backLink.label}
         </Link>
       </div>
 

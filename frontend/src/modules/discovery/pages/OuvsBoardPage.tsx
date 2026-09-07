@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Filter, LayoutGrid, List } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Pagination } from '../../../components/Pagination';
 import { AppLayout } from '../../../layout/AppLayout';
-import { formatDateTime } from '../../../lib/format';
+import { formatAmountEsCo, formatDateTime } from '../../../lib/format';
 import {
   IN_APP_NOTIFICATION_EVENT,
   type InAppNotificationEventDetail,
@@ -21,6 +21,16 @@ import {
   primaryButtonClass,
 } from '../components/ui';
 import {
+  bandejaFromPath,
+  OUV_BANDEJA_UI,
+  type OuvBandejaKey,
+} from '../lib/ouv-bandejas';
+import {
+  countActiveOuvFilters,
+  EMPTY_OUV_FILTERS,
+  type DraftFilters,
+} from '../lib/ouv-filters';
+import {
   isOuvNotificationEvent,
   OUV_ZONA_LABEL,
   OUV_ZONAS,
@@ -32,34 +42,32 @@ const KANBAN_LIMIT = 30;
 
 type ViewMode = 'lista' | 'kanban';
 
-type DraftFilters = {
-  zona: string;
-  tiene_gap: string;
-  q: string;
-  created_from: string;
-  created_to: string;
-};
-
-const EMPTY_FILTERS: DraftFilters = {
-  zona: '',
-  tiene_gap: '',
-  q: '',
-  created_from: '',
-  created_to: '',
-};
+function formatWonAmount(ouv: Ouv): string {
+  if (!ouv.monto_final) return '—';
+  const amount = formatAmountEsCo(ouv.monto_final);
+  return ouv.moneda_final ? `${amount} ${ouv.moneda_final}` : amount;
+}
 
 export function OuvsBoardPage() {
+  const { pathname } = useLocation();
+  const bandeja = bandejaFromPath(pathname);
+  return <OuvsTray key={bandeja} bandeja={bandeja} />;
+}
+
+function OuvsTray({ bandeja }: { bandeja: OuvBandejaKey }) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const isEjecutivo = user?.role_name === 'EjecutivoComercial';
   const isSoporte = user?.role_name === 'SoporteComercial';
   const canListAll =
     user?.role_name === 'SoporteComercial' || user?.role_name === 'Admin';
+  const isClosedTray = bandeja !== 'EnCurso';
+  const ui = OUV_BANDEJA_UI[bandeja];
 
-  const [view, setView] = useState<ViewMode>('kanban');
+  const [view, setView] = useState<ViewMode>(isClosedTray ? 'lista' : 'kanban');
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [draft, setDraft] = useState<DraftFilters>(EMPTY_FILTERS);
-  const [applied, setApplied] = useState<DraftFilters>(EMPTY_FILTERS);
+  const [draft, setDraft] = useState<DraftFilters>(EMPTY_OUV_FILTERS);
+  const [applied, setApplied] = useState<DraftFilters>(EMPTY_OUV_FILTERS);
   const [page, setPage] = useState(1);
   const [items, setItems] = useState<Ouv[]>([]);
   const [total, setTotal] = useState(0);
@@ -73,10 +81,13 @@ export function OuvsBoardPage() {
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
 
+  const hasActiveFilters = countActiveOuvFilters(applied) > 0;
+
   const queryBase = useCallback(() => {
     return {
       q: applied.q || undefined,
       zona: (applied.zona as OuvZona) || undefined,
+      resultado: bandeja,
       tiene_gap:
         applied.tiene_gap === ''
           ? undefined
@@ -85,7 +96,7 @@ export function OuvsBoardPage() {
       created_to: applied.created_to || undefined,
       all: canListAll || undefined,
     };
-  }, [applied, canListAll]);
+  }, [applied, canListAll, bandeja]);
 
   const loadLista = useCallback(
     async (opts?: { silent?: boolean }) => {
@@ -100,12 +111,12 @@ export function OuvsBoardPage() {
         setItems(data.items);
         setTotal(data.total);
       } catch {
-        setError('No se pudo cargar la bandeja de OUVs.');
+        setError(ui.error);
       } finally {
         if (!opts?.silent) setIsLoading(false);
       }
     },
-    [page, queryBase],
+    [page, queryBase, ui.error],
   );
 
   const loadKanban = useCallback(
@@ -135,12 +146,12 @@ export function OuvsBoardPage() {
         });
         setKanban(next);
       } catch {
-        setError('No se pudo cargar el kanban de OUVs.');
+        setError(ui.errorKanban);
       } finally {
         if (!opts?.silent) setIsLoading(false);
       }
     },
-    [queryBase],
+    [queryBase, ui.errorKanban],
   );
 
   useEffect(() => {
@@ -170,24 +181,31 @@ export function OuvsBoardPage() {
     setPage(1);
   }
 
+  function handleClearFilters() {
+    setDraft(EMPTY_OUV_FILTERS);
+    setApplied(EMPTY_OUV_FILTERS);
+    setPage(1);
+  }
+
   const toolbarIconClass = (active: boolean) =>
     [
       'grid h-9 w-9 place-items-center rounded',
       active ? 'btn-glow text-white' : 'icon-btn',
     ].join(' ');
 
+  const emptyMessage = hasActiveFilters ? ui.emptyFiltered : ui.empty;
+
   return (
     <AppLayout title="Oportunidades (OUV)">
       <DiscoveryNav showAdminTabs={false} />
       {isSoporte ? (
         <p className="mb-3 rounded border border-border bg-bg px-3 py-2 text-sm text-ink">
-          Bandeja Soporte: ves todas las OUVs (solo lectura de avance/cierre).
-          Administra motivos y plantillas de checklist desde el menú.
+          {ui.soporteHint}
         </p>
       ) : null}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-lg font-bold text-ink">
-          {isSoporte ? 'Bandeja OUV (Soporte)' : 'Bandeja OUV'}
+          {isSoporte ? ui.titleSoporte : ui.title}
         </h1>
         <div className="flex flex-wrap items-center gap-2">
           <button
@@ -222,7 +240,7 @@ export function OuvsBoardPage() {
           >
             <Filter size={18} strokeWidth={1.75} />
           </button>
-          {isEjecutivo ? (
+          {isEjecutivo && bandeja === 'EnCurso' ? (
             <button
               type="button"
               className={primaryButtonClass}
@@ -320,11 +338,7 @@ export function OuvsBoardPage() {
             <button
               type="button"
               className={ghostButtonClass}
-              onClick={() => {
-                setDraft(EMPTY_FILTERS);
-                setApplied(EMPTY_FILTERS);
-                setPage(1);
-              }}
+              onClick={handleClearFilters}
             >
               Limpiar
             </button>
@@ -340,7 +354,18 @@ export function OuvsBoardPage() {
             {isLoading ? (
               <p className="p-6 text-sm text-muted">Cargando…</p>
             ) : items.length === 0 ? (
-              <p className="p-6 text-sm text-muted">No hay OUVs.</p>
+              <div className="p-6">
+                <p className="text-sm text-muted">{emptyMessage}</p>
+                {hasActiveFilters ? (
+                  <button
+                    type="button"
+                    className={`${ghostButtonClass} mt-3`}
+                    onClick={handleClearFilters}
+                  >
+                    Limpiar filtros
+                  </button>
+                ) : null}
+              </div>
             ) : (
               <table className="w-full text-left text-sm">
                 <thead className="border-b border-border text-xs text-muted">
@@ -349,8 +374,19 @@ export function OuvsBoardPage() {
                     <th className="px-4 py-3 font-bold">Título</th>
                     <th className="px-4 py-3 font-bold">Empresa</th>
                     <th className="px-4 py-3 font-bold">Zona</th>
-                    <th className="px-4 py-3 font-bold">Resultado</th>
-                    <th className="px-4 py-3 font-bold">Creada</th>
+                    {isClosedTray ? (
+                      <>
+                        <th className="px-4 py-3 font-bold">
+                          {bandeja === 'Ganada' ? 'Monto' : 'Motivo'}
+                        </th>
+                        <th className="px-4 py-3 font-bold">Cierre</th>
+                      </>
+                    ) : (
+                      <>
+                        <th className="px-4 py-3 font-bold">Resultado</th>
+                        <th className="px-4 py-3 font-bold">Creada</th>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -376,12 +412,27 @@ export function OuvsBoardPage() {
                       <td className="px-4 py-3">
                         <ZonaBadge zona={ouv.zona_actual} />
                       </td>
-                      <td className="px-4 py-3">
-                        <ResultadoBadge resultado={ouv.resultado} />
-                      </td>
-                      <td className="px-4 py-3 text-muted">
-                        {formatDateTime(ouv.created_at)}
-                      </td>
+                      {isClosedTray ? (
+                        <>
+                          <td className="px-4 py-3 text-ink">
+                            {bandeja === 'Ganada'
+                              ? formatWonAmount(ouv)
+                              : ouv.motivo_snapshot || '—'}
+                          </td>
+                          <td className="px-4 py-3 text-muted">
+                            {formatDateTime(ouv.fecha_cierre)}
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="px-4 py-3">
+                            <ResultadoBadge resultado={ouv.resultado} />
+                          </td>
+                          <td className="px-4 py-3 text-muted">
+                            {formatDateTime(ouv.created_at)}
+                          </td>
+                        </>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -423,6 +474,15 @@ export function OuvsBoardPage() {
                         <p className="text-xs text-muted">
                           {ouv.empresa_nombre}
                         </p>
+                        {bandeja === 'Ganada' && ouv.monto_final ? (
+                          <p className="mt-1 text-xs text-muted">
+                            {formatWonAmount(ouv)}
+                          </p>
+                        ) : isClosedTray && ouv.motivo_snapshot ? (
+                          <p className="mt-1 text-xs text-muted">
+                            {ouv.motivo_snapshot}
+                          </p>
+                        ) : null}
                         {ouv.tiene_gap ? (
                           <span className="mt-1 inline-block">
                             <GapBadge />
