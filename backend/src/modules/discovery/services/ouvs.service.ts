@@ -924,7 +924,7 @@ export class OuvsService {
       );
       if (verdes < 2) {
         throw new BadRequestException(
-          'At least 2 influencias in Verde are required to advance',
+          'At least 2 influencias in Verde with an assigned contact are required to advance',
         );
       }
     }

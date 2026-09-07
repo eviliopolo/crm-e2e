@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { AppLayout } from '../../../layout/AppLayout';
-import { formatDateTime } from '../../../lib/format';
+import {
+  formatAmountEsCo,
+  formatAmountInputEsCo,
+  formatDateTime,
+  parseAmountInputEsCo,
+} from '../../../lib/format';
 import {
   IN_APP_NOTIFICATION_EVENT,
   type InAppNotificationEventDetail,
@@ -187,7 +192,7 @@ export function OuvDetailPage() {
         const detail = await fetchOuv(id);
         setOuv(detail);
         setPresupuestoConfirmado(detail.presupuesto_confirmado);
-        setPresupuestoMonto(detail.presupuesto_monto ?? '');
+        setPresupuestoMonto(formatAmountEsCo(detail.presupuesto_monto));
         setPresupuestoMoneda(detail.presupuesto_moneda ?? 'COP');
         setPresupuestoFuente(detail.presupuesto_fuente ?? 'cliente_declaro');
 
@@ -396,13 +401,13 @@ export function OuvDetailPage() {
     setActionSuccess(null);
     setSavingPresupuesto(true);
     try {
-      const monto = presupuestoMonto.trim();
-      if (monto && Number.isNaN(Number(monto))) {
+      const parsedMonto = parseAmountInputEsCo(presupuestoMonto);
+      if (presupuestoMonto.trim() && parsedMonto === null) {
         throw new Error('El monto debe ser un número válido.');
       }
       await updateOuvPresupuesto(id, {
         presupuesto_confirmado: presupuestoConfirmado,
-        presupuesto_monto: monto ? Number(monto) : null,
+        presupuesto_monto: parsedMonto,
         presupuesto_moneda: presupuestoMoneda,
         presupuesto_fuente: presupuestoFuente,
         presupuesto_fecha_captura: new Date().toISOString(),
@@ -629,15 +634,21 @@ export function OuvDetailPage() {
         <h2 className="mb-1 text-sm font-bold text-ink">Influencias</h2>
         <p className="mb-3 text-xs text-muted">
           Estado y contacto se guardan al instante (sin bloquear la tarjeta).
-          Notas se guardan medio segundo después de dejar de escribir.
+          Notas se guardan medio segundo después de dejar de escribir. Una
+          influencia en Verde solo cuenta para avanzar si tiene contacto
+          asignado.
         </p>
         <div className="grid gap-3 md:grid-cols-3">
           {INFLUENCIA_TIPOS.map((tipo) => {
             const inf = influencias.find((x) => x.tipo === tipo);
             const estado =
               (inf?.estado as InfluenciaEstado | undefined) ?? 'SinEvaluar';
-            const cardTone =
-              INFLUENCIA_ESTADO_CARD[estado] ?? INFLUENCIA_ESTADO_CARD.SinEvaluar;
+            const missingContactForVerde =
+              estado === 'Verde' && !inf?.contacto_ouv_id;
+            const cardTone = missingContactForVerde
+              ? 'border-warning/70 bg-warning/15 text-ink'
+              : INFLUENCIA_ESTADO_CARD[estado] ??
+                INFLUENCIA_ESTADO_CARD.SinEvaluar;
             const isSaving = Boolean(savingTipos[tipo]);
             const justSaved = influenciaFlash === tipo;
             return (
@@ -708,6 +719,12 @@ export function OuvDetailPage() {
                     </option>
                   ))}
                 </select>
+                {missingContactForVerde ? (
+                  <p className="mt-1 text-xs text-warning" role="status">
+                    Asigna un contacto para que esta influencia cuente al
+                    avanzar.
+                  </p>
+                ) : null}
                 <label className={`${labelClass} mt-2`}>Notas</label>
                 <textarea
                   className={`${inputClass} h-16 py-2`}
@@ -767,8 +784,10 @@ export function OuvDetailPage() {
               className={inputClass}
               value={presupuestoMonto}
               disabled={!editable}
+              inputMode="decimal"
+              autoComplete="off"
               onChange={(e) => {
-                setPresupuestoMonto(e.target.value);
+                setPresupuestoMonto(formatAmountInputEsCo(e.target.value));
                 setActionSuccess(null);
               }}
             />
@@ -937,6 +956,7 @@ export function OuvDetailPage() {
       {showAvance ? (
         <AvanceZonaModal
           ouv={ouv}
+          influencias={influencias}
           onClose={() => setShowAvance(false)}
           onAdvanced={() => void load({ silent: true })}
         />

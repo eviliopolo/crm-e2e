@@ -7,20 +7,35 @@ import {
   type OuvChecklistItem,
 } from '../api/ouvs-api';
 import {
+  countVerdeWithAssignedContact,
   guardsForDestino,
+  INFLUENCIA_TIPO_LABEL,
   nextOuvZona,
   OUV_ZONA_LABEL,
+  type InfluenciaTipo,
 } from '../lib/ouv-vocab';
 import { ModalShell } from './ModalShell';
 import { ghostButtonClass, primaryButtonClass } from './ui';
 
+type InfluenciaAdvanceRow = {
+  tipo: InfluenciaTipo | string;
+  estado: string;
+  contacto_ouv_id: string | null;
+};
+
 type Props = {
   ouv: Ouv;
+  influencias: InfluenciaAdvanceRow[];
   onClose: () => void;
   onAdvanced: () => void;
 };
 
-export function AvanceZonaModal({ ouv, onClose, onAdvanced }: Props) {
+export function AvanceZonaModal({
+  ouv,
+  influencias,
+  onClose,
+  onAdvanced,
+}: Props) {
   const destino = nextOuvZona(ouv.zona_actual);
   const [items, setItems] = useState<OuvChecklistItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,8 +69,21 @@ export function AvanceZonaModal({ ouv, onClose, onAdvanced }: Props) {
   }
 
   const guards = guardsForDestino(destino);
+  const requiresVerde =
+    destino === 'EN_FUNNEL' || destino === 'MAYOR_PROBABILIDAD';
+  const verdeCount = countVerdeWithAssignedContact(influencias);
+  const verdesSinContacto = influencias.filter(
+    (row) => row.estado === 'Verde' && !row.contacto_ouv_id,
+  );
+  const bloqueadoPorInfluencias = requiresVerde && verdeCount < 2;
 
   async function confirm() {
+    if (bloqueadoPorInfluencias) {
+      setError(
+        'Asigna un contacto a al menos 2 influencias en Verde antes de avanzar.',
+      );
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -89,6 +117,24 @@ export function AvanceZonaModal({ ouv, onClose, onAdvanced }: Props) {
         ))}
       </ul>
 
+      {requiresVerde ? (
+        <p
+          className={`mb-4 text-sm ${bloqueadoPorInfluencias ? 'text-danger' : 'text-ink'}`}
+          role={bloqueadoPorInfluencias ? 'alert' : undefined}
+        >
+          {verdeCount}/2 influencias en Verde con contacto.
+          {verdesSinContacto.length > 0
+            ? ` No cuentan: ${verdesSinContacto
+                .map(
+                  (row) =>
+                    INFLUENCIA_TIPO_LABEL[row.tipo as InfluenciaTipo] ??
+                    row.tipo,
+                )
+                .join(', ')} (Verde sin contacto).`
+            : ''}
+        </p>
+      ) : null}
+
       <h3 className="mb-2 text-xs font-bold uppercase text-muted">
         Checklist zona destino
       </h3>
@@ -117,7 +163,7 @@ export function AvanceZonaModal({ ouv, onClose, onAdvanced }: Props) {
         <button
           type="button"
           className={primaryButtonClass}
-          disabled={saving}
+          disabled={saving || bloqueadoPorInfluencias}
           onClick={() => void confirm()}
         >
           {saving ? 'Avanzando…' : 'Confirmar avance'}

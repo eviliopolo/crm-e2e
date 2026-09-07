@@ -80,6 +80,18 @@ describe('guard2InfluenciasEnVerde', () => {
     );
     expect(result.ok).toBe(true);
   });
+
+  it('rejects EN_FUNNEL when verde count is 0 (Verde without contact does not count)', async () => {
+    const result = await guard2InfluenciasEnVerde(
+      baseCtx({
+        payload: { zona_nueva: 'EN_FUNNEL', influencias_verde_count: 0 },
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.detalle).toMatch(/contacto asignado/);
+    }
+  });
 });
 
 describe('guardUsuarioEsComercialDelOUV', () => {

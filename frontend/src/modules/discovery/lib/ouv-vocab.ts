@@ -53,7 +53,7 @@ export function guardsForDestino(
   if (destino === 'EN_FUNNEL' || destino === 'MAYOR_PROBABILIDAD') {
     guards.push({
       code: 'guard2InfluenciasEnVerde',
-      label: 'Al menos 2 influencias en Verde',
+      label: 'Al menos 2 influencias en Verde con contacto asignado',
     });
   }
   return guards;
@@ -92,6 +92,20 @@ export const INFLUENCIA_ESTADOS = [
 ] as const;
 
 export type InfluenciaEstado = (typeof INFLUENCIA_ESTADOS)[number];
+
+/** Verde only counts for EN_FUNNEL / MAYOR_PROBABILIDAD with a contact. */
+export function isVerdeWithAssignedContact(row: {
+  estado: string;
+  contacto_ouv_id: string | null | undefined;
+}): boolean {
+  return row.estado === 'Verde' && Boolean(row.contacto_ouv_id);
+}
+
+export function countVerdeWithAssignedContact(
+  rows: { estado: string; contacto_ouv_id: string | null | undefined }[],
+): number {
+  return rows.filter(isVerdeWithAssignedContact).length;
+}
 
 export const INFLUENCIA_ESTADO_LABEL: Record<InfluenciaEstado, string> = {
   SinEvaluar: 'Sin Evaluar',
